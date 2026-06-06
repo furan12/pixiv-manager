@@ -1443,7 +1443,9 @@ async function executeProcess(pairs) {
             state.processing = false;
         }, 500);
     } catch (e) {
-        showToast('处理失败：' + (e.detail || e.message || e), 'error');
+        console.error('Process error:', e);
+        const errMsg = e && typeof e === 'object' ? (e.detail || e.message || JSON.stringify(e)) : String(e || '未知错误');
+        showToast('处理失败：' + errMsg, 'error');
         state.processing = false;
         btnAll.disabled = false;
         btnSel.disabled = false;
