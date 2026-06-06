@@ -573,6 +573,26 @@ body {
 #lightbox .lb-nav:disabled { opacity: 0.2; cursor: default; }
 #lightbox .lb-prev { left: 20px; }
 #lightbox .lb-next { right: 20px; }
+#lightbox .lb-close {
+    position: absolute;
+    top: 16px;
+    right: 20px;
+    background: rgba(255,255,255,0.1);
+    border: none;
+    color: #fff;
+    font-size: 1.6rem;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 202;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    line-height: 1;
+}
+#lightbox .lb-close:hover { background: rgba(255,255,255,0.25); }
 #lightbox .close-hint {
     position: absolute;
     bottom: 20px;
@@ -630,8 +650,7 @@ body {
                        onkeydown="comboKeyNav(event)" onblur="closeComboDropdown()">
                 <div class="combo-dropdown" id="override-dropdown"></div>
             </div>
-            <button id="btn-apply-override">✓ 确认匹配</button>
-            <button class="confirm-btn" id="btn-confirm-match">✅ 确认此文件夹</button>
+            <button class="confirm-btn" id="btn-apply-override">✔️ 确认匹配</button>
         </div>
         <div id="paginator" style="display:none;"></div>
         <div id="image-grid-scroll">
@@ -649,6 +668,7 @@ body {
 <div id="bottombar">
     <div class="summary" id="summary-text">就绪</div>
     <div id="progress-wrap"><div id="progress-bar"></div></div>
+    <button id="btn-confirm-match">✅ 已确认</button>
     <button id="btn-process-selected" onclick="processSelected()" disabled>▶ 处理选中</button>
     <button id="btn-process-all" onclick="processAll()" disabled>⚡ 全部处理</button>
 </div>
@@ -692,6 +712,7 @@ body {
         <img id="lightbox-img" src="" alt="Preview">
     </div>
     <button class="lb-nav lb-next" id="lb-next" onclick="event.stopPropagation();lbNext()" disabled>▶</button>
+    <button class="lb-close" id="lb-close" onclick="event.stopPropagation();closeLightbox()" title="关闭">✕</button>
     <span class="close-hint">点击黑色退出 · ← → 切图 · Esc关闭 · 滚轮缩放 · 双击缩放</span>
 </div>
 
@@ -706,7 +727,8 @@ let state = {
     results: [],          // [{b_folder, matched_a_folder, confidence, image_count, new_count, images}]
     a_folders: [],        // list of A subfolder names
     selectedIndex: -1,    // index into results[]
-    confirmed: {},        // {index: a_folder_name}
+    confirmed: {},        // {index: a_folder_name} — quick match, ready to process
+    final: {},            // {index: true} — user clicked "已确认", shows green
     skipped: {},          // {index: true}
     processing: false,
     baseB: '',            // cached folder_b_path for thumbnail URLs
@@ -987,6 +1009,7 @@ async function doScan() {
     btn.disabled = true;
     btn.textContent = '⏳ 扫描中...';
     state.confirmed = {};
+    state.final = {};
     state.skipped = {};
     state.selectedIndex = -1;
 
@@ -999,7 +1022,7 @@ async function doScan() {
         state.results = data.results;
         state.a_folders = data.a_folders;
 
-        // Auto-confirm high-confidence matches
+        // Auto-fill high-confidence matches (just pre-fill, no green)
         data.results.forEach((r, i) => {
             if (r.matched_a_folder && r.confidence >= 0.95) {
                 state.confirmed[i] = r.matched_a_folder;
@@ -1048,7 +1071,8 @@ function renderFolderList() {
     container.innerHTML = results.map((r, i) => {
         const isActive = i === state.selectedIndex;
         const isSkipped = state.skipped[i];
-        const matched = state.confirmed[i];
+        const isFinal = !!state.final[i];
+        const matched = state.confirmed[i] || state.final[i];
         const target = matched || r.matched_a_folder;
         const conf = matched ? 1.0 : r.confidence;
 
@@ -1064,11 +1088,11 @@ function renderFolderList() {
             matchText = `→ ${target} (${Math.round(conf*100)}%)`;
         }
 
-        const statusIcon = isSkipped ? '⏭️' : (matched ? '✅' : (target ? '⚠️' : '❌'));
+        const statusIcon = isSkipped ? '⏭️' : (isFinal ? '✅' : (matched ? '🔗' : (target ? '⚠️' : '❌')));
         const newCount = r.new_count || r.image_count;
 
         return `
-        <div class="folder-item ${isActive ? 'active' : ''}" onclick="selectFolder(${i})">
+        <div class="folder-item ${isActive ? 'active' : ''} ${isFinal ? 'confirmed' : ''}" onclick="selectFolder(${i})">
             <span class="folder-icon">${statusIcon}</span>
             <div class="info">
                 <div class="name" title="${escHtml(r.b_folder)}">📁 ${escHtml(r.b_folder)}</div>
@@ -1089,7 +1113,7 @@ function selectFolder(index) {
     const bar = document.getElementById('match-bar');
     bar.style.display = 'flex';
 
-    const matched = state.confirmed[index];
+    const matched = state.confirmed[index] || state.final[index];
     const target = matched || r.matched_a_folder;
     const conf = matched ? 1.0 : r.confidence;
 
@@ -1110,8 +1134,8 @@ function selectFolder(index) {
     closeComboDropdown();
 
     document.getElementById('btn-confirm-match').style.display = state.skipped[index] ? 'none' : '';
-    document.getElementById('btn-confirm-match').textContent = state.confirmed[index]
-        ? '✅ 已确认' : '✅ 确认此文件夹';
+    document.getElementById('btn-confirm-match').textContent = state.final[index]
+        ? '✅ 已确认' : '✅ 确认匹配';
 
     // Render images — thumbnails get correct src immediately
     renderImages(r);
@@ -1309,7 +1333,7 @@ function applyComboSelection(value) {
     closeComboDropdown();
 }
 
-// Override apply button
+// Override apply button — quick match (accept auto result, not final)
 document.getElementById('btn-apply-override').onclick = function() {
     const idx = state.selectedIndex;
     if (idx < 0) return;
@@ -1318,7 +1342,6 @@ document.getElementById('btn-apply-override').onclick = function() {
         showToast('请搜索并选择一个目标文件夹', 'warn');
         return;
     }
-    // Verify chosen exists in A folders
     if (!state.a_folders.includes(chosen)) {
         showToast(`"${chosen}" 不在 A 文件夹中`, 'warn');
         return;
@@ -1327,17 +1350,20 @@ document.getElementById('btn-apply-override').onclick = function() {
     delete state.skipped[idx];
     selectFolder(idx);
     updateBottomBar();
-    showToast(`已将 "${state.results[idx].b_folder}" 匹配到 "${chosen}"`, 'success');
+    showToast(`已匹配：${state.results[idx].b_folder} → ${chosen}`, 'success');
 };
 
-// Confirm button
+// Confirm button — final confirm, turns green
 document.getElementById('btn-confirm-match').onclick = function() {
     const idx = state.selectedIndex;
     if (idx < 0) return;
     const r = state.results[idx];
-    const target = r.matched_a_folder;
+    const target = state.confirmed[idx] || r.matched_a_folder;
     if (target) {
-        state.confirmed[idx] = target;
+        if (!state.confirmed[idx]) {
+            state.confirmed[idx] = target;
+        }
+        state.final[idx] = true;
         delete state.skipped[idx];
         selectFolder(idx);
         updateBottomBar();
@@ -1352,7 +1378,7 @@ function getConfirmedPairs() {
     const pairs = [];
     state.results.forEach((r, i) => {
         if (state.skipped[i]) return;
-        const target = state.confirmed[i] || r.matched_a_folder;
+        const target = state.final[i] || state.confirmed[i] || r.matched_a_folder;
         if (target) {
             pairs.push({b_folder: r.b_folder, a_folder: target});
         }
@@ -1373,7 +1399,7 @@ async function processSelected() {
     const idx = state.selectedIndex;
     if (idx < 0) return;
     const r = state.results[idx];
-    const target = state.confirmed[idx] || r.matched_a_folder;
+    const target = state.final[idx] || state.confirmed[idx] || r.matched_a_folder;
     if (!target) {
         showToast('请先为此文件夹确认目标', 'warn');
         return;
@@ -1431,15 +1457,15 @@ function updateBottomBar() {
     const btnSel = document.getElementById('btn-process-selected');
     const summary = document.getElementById('summary-text');
 
-    const confirmed = Object.keys(state.confirmed).length;
+    const final = Object.keys(state.final).length;
+    const matched = Object.keys(state.confirmed).length;
     const total = state.results.length;
     const skipped = Object.keys(state.skipped).length;
-    const autoMatched = state.results.filter(r => r.matched_a_folder && r.confidence >= 0.95).length;
 
     btnAll.disabled = pairs.length === 0 || state.processing;
     btnSel.disabled = state.selectedIndex < 0 || state.processing;
 
-    summary.textContent = `共 ${total} 个文件夹 | ${confirmed} 已确认 | ${skipped} 已跳过 | ${autoMatched} 自动匹配 | ${pairs.length} 待处理`;
+    summary.textContent = `共 ${total} 个文件夹 | ${matched} 已匹配 | ${final} 已确认 | ${skipped} 已跳过 | ${pairs.length} 待处理`;
 }
 
 // ╔═══════════════════════════════════════════════════════════╗
@@ -1470,6 +1496,7 @@ document.addEventListener('keydown', function(e) {
         const target = r.matched_a_folder;
         if (target) {
             state.confirmed[idx] = target;
+            state.final[idx] = true;
             delete state.skipped[idx];
             selectFolder(idx);
             updateBottomBar();
@@ -1482,6 +1509,7 @@ document.addEventListener('keydown', function(e) {
         if (idx >= 0) {
             state.skipped[idx] = true;
             delete state.confirmed[idx];
+            delete state.final[idx];
             selectFolder(idx);
             updateBottomBar();
             showToast(`已跳过：${state.results[idx].b_folder}`, 'info');
