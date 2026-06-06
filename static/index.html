@@ -518,14 +518,29 @@ body {
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    overflow: hidden;
 }
 #lightbox.visible { display: flex; }
+#lightbox .lb-img-wrap {
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Fill the lightbox so drag events work over the entire area */
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+}
+#lightbox .lb-img-wrap.dragging { cursor: grabbing; }
 #lightbox img {
     max-width: 88vw;
     max-height: 88vh;
     object-fit: contain;
     border-radius: 4px;
     cursor: default;
+    pointer-events: none;
+    /* Image ignores clicks — lets lb-img-wrap handle drag, and lightbox bg handle close */
 }
 #lightbox .lb-info {
     position: absolute;
@@ -565,6 +580,7 @@ body {
     transform: translateX(-50%);
     color: #888;
     font-size: 0.82rem;
+    pointer-events: none;
 }
 
 @media (max-width: 768px) {
@@ -669,12 +685,14 @@ body {
 </div>
 
 <!-- ── Lightbox ──────────────────────────────────────────── -->
-<div id="lightbox" onclick="closeLightbox()">
+<div id="lightbox">
     <span class="lb-info" id="lb-info"></span>
     <button class="lb-nav lb-prev" id="lb-prev" onclick="event.stopPropagation();lbPrev()" disabled>◀</button>
-    <img id="lightbox-img" src="" alt="Preview" onclick="event.stopPropagation()">
+    <div class="lb-img-wrap" id="lb-img-wrap">
+        <img id="lightbox-img" src="" alt="Preview">
+    </div>
     <button class="lb-nav lb-next" id="lb-next" onclick="event.stopPropagation();lbNext()" disabled>▶</button>
-    <span class="close-hint">点击空白处关闭 · ← → 键切换 · Esc 关闭</span>
+    <span class="close-hint">点击黑色退出 · ← → 切图 · Esc关闭 · 滚轮缩放 · 双击缩放</span>
 </div>
 
 <!-- ── Toast ─────────────────────────────────────────────── -->
@@ -815,12 +833,43 @@ document.getElementById('btn-save-config').onclick = saveConfig;
 let lbImages = [];          // [{thumbSrc, imageSrc, name}]
 let lbIndex = -1;
 
+// ── zoom / drag state ──────────────────────────────────────
+let lbScale = 1;
+const LB_SCALE_MIN = 0.3;
+const LB_SCALE_MAX = 6;
+const LB_SCALE_STEP = 0.2;
+let lbTranslateX = 0;
+let lbTranslateY = 0;
+let lbDragging = false;
+let lbDragStartX = 0;
+let lbDragStartY = 0;
+let lbDragOrigX = 0;
+let lbDragOrigY = 0;
+
+function lbResetView() {
+    lbScale = 1;
+    lbTranslateX = 0;
+    lbTranslateY = 0;
+    lbApplyTransform();
+}
+
+function lbApplyTransform() {
+    const img = document.getElementById('lightbox-img');
+    img.style.transform = `translate(${lbTranslateX}px, ${lbTranslateY}px) scale(${lbScale})`;
+}
+
+function lbUpdateInfo() {
+    const img = lbImages[lbIndex];
+    document.getElementById('lb-info').textContent = `${img.name}  (${lbIndex + 1} / ${lbImages.length})  ${lbScale > 1 ? Math.round(lbScale * 100) + '%' : ''}`;
+}
+
 function openLightbox(images, index) {
     lbImages = images.map(img => ({
         imageSrc: img.imageSrc,
         name: img.name,
     }));
     lbIndex = index;
+    lbResetView();
     showLightboxImage();
     document.getElementById('lightbox').classList.add('visible');
 }
@@ -828,8 +877,10 @@ function openLightbox(images, index) {
 function showLightboxImage() {
     if (lbIndex < 0 || lbIndex >= lbImages.length) return;
     const img = lbImages[lbIndex];
-    document.getElementById('lightbox-img').src = img.imageSrc;
-    document.getElementById('lb-info').textContent = `${img.name}  (${lbIndex + 1} / ${lbImages.length})`;
+    const imgEl = document.getElementById('lightbox-img');
+    imgEl.src = img.imageSrc;
+    imgEl.onload = null;
+    lbUpdateInfo();
     document.getElementById('lb-prev').disabled = lbIndex <= 0;
     document.getElementById('lb-next').disabled = lbIndex >= lbImages.length - 1;
 }
@@ -843,11 +894,82 @@ function lbNext() {
 
 function closeLightbox() {
     document.getElementById('lightbox').classList.remove('visible');
-    // Clear src to stop any in-flight requests
+    lbResetView();
     setTimeout(() => {
         document.getElementById('lightbox-img').src = '';
     }, 200);
 }
+
+// ── Wheel zoom ─────────────────────────────────────────────
+document.getElementById('lightbox').addEventListener('wheel', function(e) {
+    const dir = e.deltaY < 0 ? 1 : -1;
+    const oldScale = lbScale;
+    lbScale = Math.min(LB_SCALE_MAX, Math.max(LB_SCALE_MIN, lbScale + dir * LB_SCALE_STEP));
+    const rect = document.getElementById('lightbox').getBoundingClientRect();
+    const cx = e.clientX - rect.left - rect.width / 2;
+    const cy = e.clientY - rect.top - rect.height / 2;
+    const ratio = lbScale / oldScale;
+    lbTranslateX = cx + ratio * (lbTranslateX - cx);
+    lbTranslateY = cy + ratio * (lbTranslateY - cy);
+    lbApplyTransform();
+    lbUpdateInfo();
+    e.preventDefault();
+    e.stopPropagation();
+}, { passive: false });
+
+// ── Double-click zoom toggle ───────────────────────────────
+document.getElementById('lightbox').addEventListener('dblclick', function(e) {
+    const rect = document.getElementById('lightbox').getBoundingClientRect();
+    const cx = e.clientX - rect.left - rect.width / 2;
+    const cy = e.clientY - rect.top - rect.height / 2;
+    if (lbScale > 1.05) {
+        lbScale = 1;
+        lbTranslateX = 0;
+        lbTranslateY = 0;
+    } else {
+        const oldScale = lbScale;
+        lbScale = 2;
+        const ratio = lbScale / oldScale;
+        lbTranslateX = cx + ratio * (lbTranslateX - cx);
+        lbTranslateY = cy + ratio * (lbTranslateY - cy);
+    }
+    lbApplyTransform();
+    lbUpdateInfo();
+    e.preventDefault();
+    e.stopPropagation();
+});
+
+// ── Click on black background → closes lightbox ──
+document.getElementById('lightbox').addEventListener('click', function(e) {
+    // Close only if click landed directly on the lightbox black background
+    if (e.target.id !== 'lightbox') return;
+    closeLightbox();
+});
+
+// ── Drag to pan ────────────────────────────────────────────
+const lbWrap = document.getElementById('lb-img-wrap');
+lbWrap.addEventListener('pointerdown', function(e) {
+    lbDragging = true;
+    lbDragStartX = e.clientX;
+    lbDragStartY = e.clientY;
+    lbDragOrigX = lbTranslateX;
+    lbDragOrigY = lbTranslateY;
+    lbWrap.classList.add('dragging');
+    lbWrap.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    e.stopPropagation();
+});
+lbWrap.addEventListener('pointermove', function(e) {
+    if (!lbDragging) return;
+    lbTranslateX = lbDragOrigX + (e.clientX - lbDragStartX);
+    lbTranslateY = lbDragOrigY + (e.clientY - lbDragStartY);
+    lbApplyTransform();
+});
+document.addEventListener('pointerup', function(e) {
+    if (!lbDragging) return;
+    lbDragging = false;
+    lbWrap.classList.remove('dragging');
+});
 
 document.addEventListener('keydown', function(e) {
     if (document.getElementById('lightbox').classList.contains('visible')) {
