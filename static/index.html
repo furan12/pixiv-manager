@@ -1430,11 +1430,16 @@ async function executeProcess(pairs) {
 
         progBar.style.width = '100%';
 
-        let msg = `处理完成：`;
-        if (moved > 0) msg += `移动 ${moved} 张 `;
-        if (skipped > 0) msg += `跳过 ${skipped} 张 `;
-        if (errors > 0) msg += `失败 ${errors} 张`;
-        showToast(msg, errors > 0 ? 'warn' : 'success');
+        let msg = '';
+        if (results.length === 0) {
+            msg = `没有文件被处理（目标文件夹可能不存在或源文件夹为空）`;
+        } else {
+            msg = `处理完成：`;
+            if (moved > 0) msg += `移动 ${moved} 张 `;
+            if (skipped > 0) msg += `跳过 ${skipped} 张 `;
+            if (errors > 0) msg += `失败 ${errors} 张`;
+        }
+        showToast(msg, errors > 0 || results.length === 0 ? 'warn' : 'success');
 
         setTimeout(() => {
             progWrap.classList.remove('visible');
