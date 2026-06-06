@@ -1463,17 +1463,18 @@ async function executeProcess(pairs) {
 
 function updateBottomBar() {
     const pairs = getConfirmedPairs();
+    const finalIndices = Object.keys(state.final);
     const btnAll = document.getElementById('btn-process-all');
     const btnSel = document.getElementById('btn-process-selected');
     const summary = document.getElementById('summary-text');
 
-    const final = Object.keys(state.final).length;
+    const final = finalIndices.length;
     const matched = Object.keys(state.confirmed).length;
     const total = state.results.length;
     const skipped = Object.keys(state.skipped).length;
 
     btnAll.disabled = pairs.length === 0 || state.processing;
-    btnSel.disabled = state.selectedIndex < 0 || state.processing;
+    btnSel.disabled = final === 0 || state.processing;
 
     summary.textContent = `共 ${total} 个文件夹 | ${matched} 已匹配 | ${final} 已确认 | ${skipped} 已跳过 | ${pairs.length} 待处理`;
 }
