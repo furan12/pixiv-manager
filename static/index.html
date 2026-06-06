@@ -1397,22 +1397,24 @@ async function processAll() {
 
 async function processSelected() {
     // Process all finally-confirmed (green) folders
-    const finalIndices = Object.keys(state.final).map(Number);
+    const finalIndices = Object.keys(state.final).map(Number).sort((a,b) => a-b);
     if (finalIndices.length === 0) {
         showToast('没有已确认的文件夹，请先点 ✅ 已确认', 'info');
         return;
     }
     const pairs = finalIndices.map(i => {
         const r = state.results[i];
-        const target = state.final[i] || state.confirmed[i] || r.matched_a_folder;
+        const target = state.confirmed[i] || r.matched_a_folder;
         return {b_folder: r.b_folder, a_folder: target};
-    });
+    }).filter(p => p.a_folder);
+    console.log('processSelected pairs:', pairs);
     await executeProcess(pairs);
 }
 
 async function executeProcess(pairs) {
     if (state.processing) return;
     state.processing = true;
+    console.log('executeProcess called with pairs:', JSON.stringify(pairs));
 
     const btnAll = document.getElementById('btn-process-all');
     const btnSel = document.getElementById('btn-process-selected');
@@ -1451,9 +1453,9 @@ async function executeProcess(pairs) {
             state.processing = false;
         }, 500);
     } catch (e) {
-        console.error('Process error:', e);
-        const errMsg = e && typeof e === 'object' ? (e.detail || e.message || JSON.stringify(e)) : String(e || '未知错误');
-        showToast('处理失败：' + errMsg, 'error');
+        const errDetail = e && typeof e === 'object' ? (e.detail || e.message || JSON.stringify(e)) : String(e || 'unknown');
+        console.error('Process error:', errDetail, e);
+        showToast('处理失败：' + errDetail, 'error');
         state.processing = false;
         btnAll.disabled = false;
         btnSel.disabled = false;
