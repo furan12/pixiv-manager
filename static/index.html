@@ -1396,15 +1396,18 @@ async function processAll() {
 }
 
 async function processSelected() {
-    const idx = state.selectedIndex;
-    if (idx < 0) return;
-    const r = state.results[idx];
-    const target = state.final[idx] || state.confirmed[idx] || r.matched_a_folder;
-    if (!target) {
-        showToast('请先为此文件夹确认目标', 'warn');
+    // Process all finally-confirmed (green) folders
+    const finalIndices = Object.keys(state.final).map(Number);
+    if (finalIndices.length === 0) {
+        showToast('没有已确认的文件夹，请先点 ✅ 已确认', 'info');
         return;
     }
-    await executeProcess([{b_folder: r.b_folder, a_folder: target}]);
+    const pairs = finalIndices.map(i => {
+        const r = state.results[i];
+        const target = state.final[i] || state.confirmed[i] || r.matched_a_folder;
+        return {b_folder: r.b_folder, a_folder: target};
+    });
+    await executeProcess(pairs);
 }
 
 async function executeProcess(pairs) {
