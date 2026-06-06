@@ -1,0 +1,1401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixiv Image Manager</title>
+<style>
+/* ── Reset & Variables ──────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --surface2: #0f3460;
+    --primary: #e94560;
+    --accent: #53d8fb;
+    --text: #e0e0e0;
+    --text2: #a0a0b0;
+    --good: #4ade80;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --border: #2a2a4a;
+    --radius: 8px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.3);
+}
+body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ── Top Bar ──────────────────────────────────────────── */
+#topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+#topbar h1 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+#topbar h1 .icon { font-size: 1.4rem; }
+#btn-config {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 14px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.15s;
+}
+#btn-config:hover { background: var(--primary); border-color: var(--primary); }
+#btn-scan {
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    padding: 6px 20px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-left: 10px;
+    transition: opacity 0.15s;
+}
+#btn-scan:hover { opacity: 0.85; }
+#btn-scan:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Main Layout ──────────────────────────────────────── */
+#main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* ── Left Panel: Folder List ──────────────────────────── */
+#left-panel {
+    width: 320px;
+    min-width: 280px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+#left-panel .header {
+    padding: 12px 16px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+#folder-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+}
+#folder-list::-webkit-scrollbar { width: 5px; }
+#folder-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+.folder-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+}
+.folder-item:hover { background: rgba(255,255,255,0.03); }
+.folder-item.active {
+    background: rgba(233,69,96,0.1);
+    border-left-color: var(--primary);
+}
+.folder-item .folder-icon { font-size: 1.1rem; flex-shrink: 0; }
+.folder-item .info { flex: 1; min-width: 0; }
+.folder-item .name {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.folder-item .match-line {
+    font-size: 0.78rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.folder-item .match-line.matched { color: var(--good); }
+.folder-item .match-line.low-conf { color: var(--warn); }
+.folder-item .match-line.unmatched { color: var(--bad); }
+.folder-item .count {
+    font-size: 0.75rem;
+    background: var(--surface2);
+    color: var(--accent);
+    padding: 2px 8px;
+    border-radius: 12px;
+    flex-shrink: 0;
+}
+
+/* ── Right Panel: Preview ─────────────────────────────── */
+#right-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Match info bar */
+#match-bar {
+    padding: 12px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+#match-bar .label { font-size: 0.85rem; color: var(--text2); }
+#match-bar .match-target {
+    font-weight: 600;
+    font-size: 1rem;
+}
+#match-bar .conf-badge {
+    font-size: 0.78rem;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-weight: 600;
+}
+.conf-badge.high { background: rgba(74,222,128,0.2); color: var(--good); }
+.conf-badge.medium { background: rgba(251,191,36,0.2); color: var(--warn); }
+.conf-badge.low { background: rgba(248,113,113,0.2); color: var(--bad); }
+
+/* ── Searchable Combo Box ─────────────────────────────── */
+.combo-box {
+    position: relative;
+    min-width: 180px;
+    z-index: 10;
+}
+.combo-box input {
+    width: 100%;
+    padding: 5px 10px;
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    outline: none;
+}
+.combo-box input:focus { border-color: var(--primary); }
+.combo-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 260px;
+    overflow-y: auto;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    box-shadow: var(--shadow);
+}
+.combo-dropdown.open { display: block; }
+.combo-dropdown::-webkit-scrollbar { width: 4px; }
+.combo-dropdown::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+.combo-option {
+    padding: 6px 10px;
+    font-size: 0.84rem;
+    cursor: pointer;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.combo-option:hover, .combo-option.highlight {
+    background: var(--primary);
+    color: #fff;
+}
+.combo-option.selected { color: var(--accent); font-weight: 600; }
+
+#match-bar button {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 4px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    transition: background 0.15s;
+    white-space: nowrap;
+}
+#match-bar button:hover { background: var(--primary); border-color: var(--primary); }
+#match-bar button.confirm-btn { background: var(--good); color: #000; border-color: var(--good); font-weight: 600; }
+#match-bar button.confirm-btn:hover { opacity: 0.8; }
+
+/* Image grid */
+#image-grid-scroll {
+    flex: 1;
+    overflow-y: auto;
+}
+#image-grid-scroll::-webkit-scrollbar { width: 5px; }
+#image-grid-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+#image-grid {
+    padding: 16px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    align-content: start;
+}
+@media (min-width: 1400px) {
+    #image-grid { grid-template-columns: repeat(5, 1fr); }
+}
+@media (min-width: 1800px) {
+    #image-grid { grid-template-columns: repeat(6, 1fr); }
+}
+@media (max-width: 1000px) {
+    #image-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 700px) {
+    #image-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Pagination */
+#paginator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 10px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    font-size: 0.85rem;
+    color: var(--text2);
+}
+#paginator button {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 4px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    transition: background 0.15s;
+}
+#paginator button:hover { background: var(--primary); border-color: var(--primary); }
+#paginator button:disabled { opacity: 0.3; cursor: not-allowed; }
+#paginator .page-info { font-weight: 600; color: var(--accent); }
+#paginator .page-select {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    width: 60px;
+    text-align: center;
+}
+
+.image-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    transition: transform 0.15s;
+    cursor: pointer;
+}
+.image-card:hover { transform: translateY(-2px); }
+.image-card .thumb-wrap {
+    width: 100%;
+    aspect-ratio: 1;
+    overflow: hidden;
+    background: #0a0a15;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+/* Placeholder shown while image loads */
+.thumb-wrap .placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #333;
+    font-size: 2rem;
+}
+.image-card .thumb-wrap img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    position: relative;
+    z-index: 1;
+}
+.image-card .img-name {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+    color: var(--text2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Empty state */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text2);
+    gap: 12px;
+}
+.empty-state .big-icon { font-size: 4rem; opacity: 0.3; }
+.empty-state p { font-size: 1rem; }
+
+/* ── Bottom Bar ───────────────────────────────────────── */
+#bottombar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+    gap: 12px;
+}
+#bottombar .summary {
+    font-size: 0.85rem;
+    color: var(--text2);
+    flex: 1;
+}
+#bottombar button {
+    padding: 8px 20px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    border: none;
+    transition: opacity 0.15s;
+}
+#btn-process-all { background: var(--good); color: #000; }
+#btn-process-selected { background: var(--accent); color: #000; }
+#bottombar button:hover { opacity: 0.8; }
+#bottombar button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Progress bar */
+#progress-wrap {
+    display: none;
+    width: 200px;
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+#progress-wrap.visible { display: block; }
+#progress-bar {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.2s;
+}
+
+/* Toast */
+#toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--surface2);
+    color: var(--text);
+    padding: 12px 20px;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    z-index: 999;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s;
+    pointer-events: none;
+    font-size: 0.9rem;
+    max-width: 400px;
+}
+#toast.show { opacity: 1; transform: translateY(0); }
+#toast.success { border-left: 3px solid var(--good); }
+#toast.error { border-left: 3px solid var(--bad); }
+#toast.info { border-left: 3px solid var(--accent); }
+
+/* ── Config Modal ──────────────────────────────────────── */
+#modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+}
+#modal-overlay.visible { display: flex; }
+#config-modal {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 28px;
+    width: 480px;
+    max-width: 90vw;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+}
+#config-modal h2 {
+    font-size: 1.1rem;
+    margin-bottom: 20px;
+    color: var(--primary);
+}
+#config-modal .field { margin-bottom: 14px; }
+#config-modal label {
+    display: block;
+    font-size: 0.82rem;
+    color: var(--text2);
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+#config-modal input, #config-modal select {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+#config-modal input:focus, #config-modal select:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+#config-modal .actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+}
+#config-modal .actions button {
+    padding: 8px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    border: none;
+    font-weight: 600;
+}
+#config-modal #btn-save-config { background: var(--primary); color: #fff; }
+#config-modal #btn-cancel-config { background: var(--surface2); color: var(--text); }
+
+/* ── Image Lightbox ───────────────────────────────────── */
+#lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.92);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+#lightbox.visible { display: flex; }
+#lightbox img {
+    max-width: 88vw;
+    max-height: 88vh;
+    object-fit: contain;
+    border-radius: 4px;
+    cursor: default;
+}
+#lightbox .lb-info {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #ccc;
+    font-size: 0.9rem;
+    background: rgba(0,0,0,0.6);
+    padding: 4px 16px;
+    border-radius: 12px;
+    pointer-events: none;
+}
+#lightbox .lb-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.08);
+    border: none;
+    color: #fff;
+    font-size: 2.5rem;
+    padding: 16px 12px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.2s;
+    z-index: 201;
+    line-height: 1;
+}
+#lightbox .lb-nav:hover { background: rgba(255,255,255,0.2); }
+#lightbox .lb-nav:disabled { opacity: 0.2; cursor: default; }
+#lightbox .lb-prev { left: 20px; }
+#lightbox .lb-next { right: 20px; }
+#lightbox .close-hint {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #888;
+    font-size: 0.82rem;
+}
+
+@media (max-width: 768px) {
+    #main { flex-direction: column; }
+    #left-panel { width: 100%; max-height: 40vh; }
+    #image-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Top Bar ────────────────────────────────────────────── -->
+<div id="topbar">
+    <h1><span class="icon">🎨</span> Pixiv Image Manager</h1>
+    <div>
+        <button id="btn-config" title="Settings">⚙️ 设置</button>
+        <button id="btn-scan" onclick="doScan()">🔄 扫描</button>
+    </div>
+</div>
+
+<!-- ── Main Area ─────────────────────────────────────────── -->
+<div id="main">
+    <!-- Left Panel -->
+    <div id="left-panel">
+        <div class="header">
+            <span>📁 新图片文件夹</span>
+            <span id="total-count" style="font-weight:400;font-size:0.78rem;"></span>
+        </div>
+        <div id="folder-list">
+            <div class="empty-state" style="height:200px;">
+                <div class="big-icon">📭</div>
+                <p>点击「🔄 扫描」开始</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Panel -->
+    <div id="right-panel">
+        <div id="match-bar" style="display:none;">
+            <span class="label">匹配到：</span>
+            <span class="match-target" id="match-target-name">—</span>
+            <span class="conf-badge high" id="conf-badge">100%</span>
+            <span style="color:var(--text2);font-size:0.8rem;">如不正确，搜索并选择正确目标：</span>
+            <div class="combo-box" id="override-combo">
+                <input type="text" id="override-search" placeholder="搜索作者名..." autocomplete="off"
+                       onfocus="openComboDropdown()" oninput="filterComboDropdown()"
+                       onkeydown="comboKeyNav(event)" onblur="closeComboDropdown()">
+                <div class="combo-dropdown" id="override-dropdown"></div>
+            </div>
+            <button id="btn-apply-override">✓ 确认匹配</button>
+            <button class="confirm-btn" id="btn-confirm-match">✅ 确认此文件夹</button>
+        </div>
+        <div id="paginator" style="display:none;"></div>
+        <div id="image-grid-scroll">
+        <div id="image-grid">
+            <div class="empty-state">
+                <div class="big-icon">👈</div>
+                <p>从左侧选择一个文件夹查看图片</p>
+            </div>
+        </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Bottom Bar ─────────────────────────────────────────── -->
+<div id="bottombar">
+    <div class="summary" id="summary-text">就绪</div>
+    <div id="progress-wrap"><div id="progress-bar"></div></div>
+    <button id="btn-process-selected" onclick="processSelected()" disabled>▶ 处理选中</button>
+    <button id="btn-process-all" onclick="processAll()" disabled>⚡ 全部处理</button>
+</div>
+
+<!-- ── Config Modal ──────────────────────────────────────── -->
+<div id="modal-overlay">
+    <div id="config-modal">
+        <h2>⚙️ 设置</h2>
+        <div class="field">
+            <label>主文件夹 A（已分类的作者图片）</label>
+            <input id="cfg-folder-a" placeholder="例如：D:\Pixiv\Sorted">
+        </div>
+        <div class="field">
+            <label>下载文件夹 B（插件下载的新图片）</label>
+            <input id="cfg-folder-b" placeholder="例如：D:\Pixiv\Downloads">
+        </div>
+        <div class="field">
+            <label>自动匹配置信度阈值（低于此值需要手动确认）</label>
+            <input id="cfg-threshold" type="number" min="0" max="1" step="0.05" value="0.80">
+        </div>
+        <div class="field">
+            <label>重复文件名处理</label>
+            <select id="cfg-dup-action">
+                <option value="skip">跳过</option>
+                <option value="rename">重命名 (添加序号)</option>
+                <option value="overwrite">覆盖</option>
+            </select>
+        </div>
+        <div class="actions">
+            <button id="btn-cancel-config" onclick="closeConfig()">取消</button>
+            <button id="btn-save-config" onclick="saveConfig()">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Lightbox ──────────────────────────────────────────── -->
+<div id="lightbox" onclick="closeLightbox()">
+    <span class="lb-info" id="lb-info"></span>
+    <button class="lb-nav lb-prev" id="lb-prev" onclick="event.stopPropagation();lbPrev()" disabled>◀</button>
+    <img id="lightbox-img" src="" alt="Preview" onclick="event.stopPropagation()">
+    <button class="lb-nav lb-next" id="lb-next" onclick="event.stopPropagation();lbNext()" disabled>▶</button>
+    <span class="close-hint">点击空白处关闭 · ← → 键切换 · Esc 关闭</span>
+</div>
+
+<!-- ── Toast ─────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<script>
+// ╔═══════════════════════════════════════════════════════════╗
+// ║                   Application State                      ║
+// ╚═══════════════════════════════════════════════════════════╝
+let state = {
+    results: [],          // [{b_folder, matched_a_folder, confidence, image_count, new_count, images}]
+    a_folders: [],        // list of A subfolder names
+    selectedIndex: -1,    // index into results[]
+    confirmed: {},        // {index: a_folder_name}
+    skipped: {},          // {index: true}
+    processing: false,
+    baseB: '',            // cached folder_b_path for thumbnail URLs
+    currentImageList: [], // [{name, thumbSrc, imageSrc}] for the selected folder
+    currentPage: 0,       // current page in paginator
+};
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║                   API Helpers                             ║
+// ╚═══════════════════════════════════════════════════════════╝
+const API = {
+    async getConfig() {
+        const r = await fetch('/api/config');
+        if (!r.ok) throw await r.json();
+        return r.json();
+    },
+    async saveConfig(cfg) {
+        const r = await fetch('/api/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(cfg),
+        });
+        if (!r.ok) throw await r.json();
+        return r.json();
+    },
+    async scan() {
+        const r = await fetch('/api/scan', {method: 'POST'});
+        if (!r.ok) throw await r.json();
+        return r.json();
+    },
+    async rematch(overrides) {
+        const r = await fetch('/api/rematch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({overrides}),
+        });
+        if (!r.ok) throw await r.json();
+        return r.json();
+    },
+    async process(pairs) {
+        const r = await fetch('/api/process', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({pairs}),
+        });
+        if (!r.ok) throw await r.json();
+        return r.json();
+    },
+    async foldersA() {
+        const r = await fetch('/api/folders-a');
+        if (!r.ok) throw await r.json();
+        return r.json();
+    },
+    thumbUrl(filePath) {
+        const hash = btoa(unescape(encodeURIComponent(filePath))).substring(0, 16);
+        return `/api/thumbnail/x?path=${encodeURIComponent(filePath)}`;
+    },
+    imageUrl(filePath) {
+        const hash = btoa(unescape(encodeURIComponent(filePath))).substring(0, 16);
+        return `/api/image/x?path=${encodeURIComponent(filePath)}`;
+    },
+    /** Build full OS path for a file inside a B subfolder. */
+    fullPath(bFolder, imgName) {
+        const base = state.baseB.replace(/\\/g, '/').replace(/\/$/, '');
+        return base + '/' + bFolder + '/' + imgName;
+    },
+};
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║                   Toast                                   ║
+// ╚═══════════════════════════════════════════════════════════╝
+let toastTimer = null;
+function showToast(msg, type = 'info') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = `show ${type}`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.className = '', 3000);
+}
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║                   Config Modal                            ║
+// ╚═══════════════════════════════════════════════════════════╝
+async function openConfig() {
+    document.getElementById('modal-overlay').classList.add('visible');
+    try {
+        const cfg = await API.getConfig();
+        document.getElementById('cfg-folder-a').value = cfg.folder_a_path || '';
+        document.getElementById('cfg-folder-b').value = cfg.folder_b_path || '';
+        document.getElementById('cfg-threshold').value = cfg.confidence_threshold ?? 0.80;
+        document.getElementById('cfg-dup-action').value = cfg.duplicate_action || 'skip';
+    } catch (e) {
+        showToast('加载设置失败', 'error');
+    }
+}
+function closeConfig() {
+    document.getElementById('modal-overlay').classList.remove('visible');
+}
+async function saveConfig() {
+    try {
+        const cfg = await API.saveConfig({
+            folder_a_path: document.getElementById('cfg-folder-a').value.trim(),
+            folder_b_path: document.getElementById('cfg-folder-b').value.trim(),
+            confidence_threshold: parseFloat(document.getElementById('cfg-threshold').value),
+            duplicate_action: document.getElementById('cfg-dup-action').value,
+        });
+        state.baseB = cfg.folder_b_path || '';
+        closeConfig();
+        showToast('设置已保存 ✅', 'success');
+    } catch (e) {
+        showToast('保存失败：' + (e.detail || e.message || e), 'error');
+    }
+}
+document.getElementById('btn-config').onclick = openConfig;
+document.getElementById('modal-overlay').onclick = function(e) {
+    if (e.target === this) closeConfig();
+};
+document.getElementById('btn-cancel-config').onclick = closeConfig;
+document.getElementById('btn-save-config').onclick = saveConfig;
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║                   Lightbox                                ║
+// ╚═══════════════════════════════════════════════════════════╝
+let lbImages = [];          // [{thumbSrc, imageSrc, name}]
+let lbIndex = -1;
+
+function openLightbox(images, index) {
+    lbImages = images.map(img => ({
+        imageSrc: img.imageSrc,
+        name: img.name,
+    }));
+    lbIndex = index;
+    showLightboxImage();
+    document.getElementById('lightbox').classList.add('visible');
+}
+
+function showLightboxImage() {
+    if (lbIndex < 0 || lbIndex >= lbImages.length) return;
+    const img = lbImages[lbIndex];
+    document.getElementById('lightbox-img').src = img.imageSrc;
+    document.getElementById('lb-info').textContent = `${img.name}  (${lbIndex + 1} / ${lbImages.length})`;
+    document.getElementById('lb-prev').disabled = lbIndex <= 0;
+    document.getElementById('lb-next').disabled = lbIndex >= lbImages.length - 1;
+}
+
+function lbPrev() {
+    if (lbIndex > 0) { lbIndex--; showLightboxImage(); }
+}
+function lbNext() {
+    if (lbIndex < lbImages.length - 1) { lbIndex++; showLightboxImage(); }
+}
+
+function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('visible');
+    // Clear src to stop any in-flight requests
+    setTimeout(() => {
+        document.getElementById('lightbox-img').src = '';
+    }, 200);
+}
+
+document.addEventListener('keydown', function(e) {
+    if (document.getElementById('lightbox').classList.contains('visible')) {
+        if (e.key === 'Escape') { closeLightbox(); return; }
+        if (e.key === 'ArrowLeft') { e.preventDefault(); lbPrev(); return; }
+        if (e.key === 'ArrowRight') { e.preventDefault(); lbNext(); return; }
+    }
+});
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║                   Scan & Render                           ║
+// ╚═══════════════════════════════════════════════════════════╝
+async function doScan() {
+    const btn = document.getElementById('btn-scan');
+    btn.disabled = true;
+    btn.textContent = '⏳ 扫描中...';
+    state.confirmed = {};
+    state.skipped = {};
+    state.selectedIndex = -1;
+
+    try {
+        // Cache baseB path for thumbnail URLs
+        const cfg = await API.getConfig();
+        state.baseB = cfg.folder_b_path || '';
+
+        const data = await API.scan();
+        state.results = data.results;
+        state.a_folders = data.a_folders;
+
+        // Auto-confirm high-confidence matches
+        data.results.forEach((r, i) => {
+            if (r.matched_a_folder && r.confidence >= 0.95) {
+                state.confirmed[i] = r.matched_a_folder;
+            }
+        });
+
+        renderFolderList();
+        updateBottomBar();
+        if (data.results.length > 0) {
+            selectFolder(0);
+        } else {
+            document.getElementById('match-bar').style.display = 'none';
+            document.getElementById('paginator').style.display = 'none';
+            document.getElementById('image-grid').innerHTML = `
+                <div class="empty-state">
+                    <div class="big-icon">🎉</div>
+                    <p>没有新图片！B 文件夹为空。</p>
+                </div>`;
+        }
+        showToast(`扫描完成：找到 ${data.total_new} 张新图片（共 ${data.results.length} 个作者文件夹）`, 'success');
+    } catch (e) {
+        showToast('扫描失败：' + (e.detail || e.message || e), 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '🔄 扫描';
+    }
+}
+
+function renderFolderList() {
+    const container = document.getElementById('folder-list');
+    const results = state.results;
+
+    if (results.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state" style="height:200px;">
+                <div class="big-icon">📭</div>
+                <p>点击「🔄 扫描」开始</p>
+            </div>`;
+        document.getElementById('total-count').textContent = '';
+        return;
+    }
+
+    const totalNew = results.reduce((s, r) => s + (r.new_count || r.image_count), 0);
+    document.getElementById('total-count').textContent = `共 ${totalNew} 张新图`;
+
+    container.innerHTML = results.map((r, i) => {
+        const isActive = i === state.selectedIndex;
+        const isSkipped = state.skipped[i];
+        const matched = state.confirmed[i];
+        const target = matched || r.matched_a_folder;
+        const conf = matched ? 1.0 : r.confidence;
+
+        let matchClass = 'matched';
+        let matchText = `→ ${target || '???'}`;
+        if (!target) {
+            matchClass = 'unmatched';
+            matchText = '→ 未匹配';
+        } else if (conf < 0.85) {
+            matchClass = 'low-conf';
+            matchText = `→ ${target} (${Math.round(conf*100)}%)`;
+        } else {
+            matchText = `→ ${target} (${Math.round(conf*100)}%)`;
+        }
+
+        const statusIcon = isSkipped ? '⏭️' : (matched ? '✅' : (target ? '⚠️' : '❌'));
+        const newCount = r.new_count || r.image_count;
+
+        return `
+        <div class="folder-item ${isActive ? 'active' : ''}" onclick="selectFolder(${i})">
+            <span class="folder-icon">${statusIcon}</span>
+            <div class="info">
+                <div class="name" title="${escHtml(r.b_folder)}">📁 ${escHtml(r.b_folder)}</div>
+                <div class="match-line ${matchClass}">${matchText}</div>
+            </div>
+            <span class="count">${newCount} 张</span>
+        </div>`;
+    }).join('');
+}
+
+function selectFolder(index) {
+    state.selectedIndex = index;
+    renderFolderList();
+
+    const r = state.results[index];
+    if (!r) return;
+
+    const bar = document.getElementById('match-bar');
+    bar.style.display = 'flex';
+
+    const matched = state.confirmed[index];
+    const target = matched || r.matched_a_folder;
+    const conf = matched ? 1.0 : r.confidence;
+
+    document.getElementById('match-target-name').textContent = target || '（未匹配）';
+
+    const badge = document.getElementById('conf-badge');
+    badge.textContent = target ? Math.round(conf * 100) + '%' : '0%';
+    badge.className = 'conf-badge ' + (
+        conf >= 0.90 ? 'high' : (conf >= 0.70 ? 'medium' : 'low')
+    );
+
+    // Populate combo box with all A folders
+    populateComboData(state.a_folders, target);
+
+    // Init combo search input with current match
+    const searchInput = document.getElementById('override-search');
+    searchInput.value = target || '';
+    closeComboDropdown();
+
+    document.getElementById('btn-confirm-match').style.display = state.skipped[index] ? 'none' : '';
+    document.getElementById('btn-confirm-match').textContent = state.confirmed[index]
+        ? '✅ 已确认' : '✅ 确认此文件夹';
+
+    // Render images — thumbnails get correct src immediately
+    renderImages(r);
+}
+
+const PAGE_SIZE = 30;
+
+function renderImages(r) {
+    const grid = document.getElementById('image-grid');
+    const scrollWrap = document.getElementById('image-grid-scroll');
+    const bFolder = r.b_folder;
+    const images = r.images || [];
+
+    if (images.length === 0) {
+        grid.innerHTML = `<div class="empty-state"><div class="big-icon">🖼️</div><p>此文件夹中没有图片</p></div>`;
+        document.getElementById('paginator').style.display = 'none';
+        return;
+    }
+
+    // Build the full image data once
+    state.currentImageList = images.map(img => {
+        const fullPath = API.fullPath(bFolder, img);
+        return {
+            name: img,
+            thumbSrc: API.thumbUrl(fullPath),
+            imageSrc: API.imageUrl(fullPath),
+        };
+    });
+
+    state.currentPage = 0;
+    renderCurrentPage();
+    renderPaginator();
+}
+
+function renderCurrentPage() {
+    const grid = document.getElementById('image-grid');
+    const scrollWrap = document.getElementById('image-grid-scroll');
+    const images = state.currentImageList || [];
+    const start = state.currentPage * PAGE_SIZE;
+    const page = images.slice(start, start + PAGE_SIZE);
+
+    grid.innerHTML = page.map(img => {
+        // Make the page-local index available for openLightbox
+        const pageIdx = page.indexOf(img);
+        return `
+        <div class="image-card" onclick="openLightbox(state.currentImageList, ${start + pageIdx})"
+             data-index="${start + pageIdx}">
+            <div class="thumb-wrap">
+                <span class="placeholder">🖼️</span>
+                <img src="${escAttr(img.thumbSrc)}" alt="${escAttr(img.name)}" loading="lazy"
+                     onload="this.previousElementSibling.style.display='none'"
+                     onerror="this.previousElementSibling.textContent='❌'">
+            </div>
+            <div class="img-name" title="${escHtml(img.name)}">${escHtml(img.name)}</div>
+        </div>`;
+    }).join('');
+
+    // Scroll to top of the scroll wrapper
+    scrollWrap.scrollTop = 0;
+}
+
+function renderPaginator() {
+    const pg = document.getElementById('paginator');
+    const images = state.currentImageList || [];
+    const totalPages = Math.ceil(images.length / PAGE_SIZE);
+    const cur = state.currentPage;
+
+    if (totalPages <= 1) {
+        pg.style.display = 'none';
+        return;
+    }
+    pg.style.display = 'flex';
+    pg.innerHTML = `
+        <button onclick="goToPage(0)" ${cur === 0 ? 'disabled' : ''} title="首页">⏮</button>
+        <button onclick="goToPage(${cur - 1})" ${cur === 0 ? 'disabled' : ''} title="上一页">◀</button>
+        <span class="page-info">第 <input type="number" class="page-select" id="page-input"
+              value="${cur + 1}" min="1" max="${totalPages}"
+              onchange="goToPage(parseInt(this.value)-1)"
+              onkeydown="if(event.key==='Enter')goToPage(parseInt(this.value)-1)"> / ${totalPages} 页</span>
+        <button onclick="goToPage(${cur + 1})" ${cur >= totalPages - 1 ? 'disabled' : ''} title="下一页">▶</button>
+        <button onclick="goToPage(${totalPages - 1})" ${cur >= totalPages - 1 ? 'disabled' : ''} title="末页">⏭</button>
+        <span style="color:var(--text2);">共 ${images.length} 张</span>`;
+}
+
+function goToPage(pageNum) {
+    const images = state.currentImageList || [];
+    const totalPages = Math.ceil(images.length / PAGE_SIZE);
+    state.currentPage = Math.max(0, Math.min(pageNum, totalPages - 1));
+    renderCurrentPage();
+    renderPaginator();
+}
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║             Searchable Combo Box Logic                     ║
+// ╚═══════════════════════════════════════════════════════════╝
+let comboData = [];          // all folder names
+let comboFiltered = [];      // filtered by search
+let comboHighlight = -1;     // keyboard nav highlight index
+let comboSelectedValue = ''; // currently selected folder name
+
+function populateComboData(folders, currentTarget) {
+    comboData = folders.slice().sort();
+    comboFiltered = comboData.slice();
+    comboHighlight = -1;
+    comboSelectedValue = currentTarget || '';
+    renderComboOptions();
+}
+
+function renderComboOptions() {
+    const dd = document.getElementById('override-dropdown');
+    if (comboFiltered.length === 0) {
+        dd.innerHTML = '<div class="combo-option" style="color:var(--text2);cursor:default;">无匹配结果</div>';
+    } else {
+        dd.innerHTML = comboFiltered.map((f, i) => {
+            const cls = (i === comboHighlight ? 'highlight' : '') +
+                        (f === comboSelectedValue ? ' selected' : '');
+            return `<div class="combo-option ${cls}" data-idx="${i}" data-value="${escAttr(f)}"
+                         onmousedown="comboPick(event, '${escAttr(f)}')">${escHtml(f)}</div>`;
+        }).join('');
+    }
+}
+
+function openComboDropdown() {
+    const dd = document.getElementById('override-dropdown');
+    // Reset filter to show all when opening
+    const searchInput = document.getElementById('override-search');
+    comboFiltered = comboData.slice();
+    comboHighlight = comboFiltered.indexOf(comboSelectedValue);
+    renderComboOptions();
+    dd.classList.add('open');
+}
+
+function closeComboDropdown() {
+    // Delay to allow mousedown on option to fire before blur closes it
+    setTimeout(() => {
+        document.getElementById('override-dropdown').classList.remove('open');
+    }, 150);
+}
+
+function filterComboDropdown() {
+    const q = document.getElementById('override-search').value.toLowerCase().trim();
+    if (!q) {
+        comboFiltered = comboData.slice();
+    } else {
+        comboFiltered = comboData.filter(f => f.toLowerCase().includes(q));
+    }
+    comboHighlight = comboFiltered.length > 0 ? 0 : -1;
+    renderComboOptions();
+    document.getElementById('override-dropdown').classList.add('open');
+}
+
+function comboKeyNav(e) {
+    const dd = document.getElementById('override-dropdown');
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        dd.classList.add('open');
+        if (comboFiltered.length === 0) return;
+        comboHighlight = Math.min(comboHighlight + 1, comboFiltered.length - 1);
+        renderComboOptions();
+        scrollComboHighlight();
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        dd.classList.add('open');
+        if (comboFiltered.length === 0) return;
+        comboHighlight = Math.max(comboHighlight - 1, 0);
+        renderComboOptions();
+        scrollComboHighlight();
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (dd.classList.contains('open') && comboHighlight >= 0 && comboHighlight < comboFiltered.length) {
+            const val = comboFiltered[comboHighlight];
+            applyComboSelection(val);
+        } else if (comboFiltered.length === 1) {
+            applyComboSelection(comboFiltered[0]);
+        }
+    } else if (e.key === 'Escape') {
+        closeComboDropdown();
+    }
+}
+
+function scrollComboHighlight() {
+    const dd = document.getElementById('override-dropdown');
+    const el = dd.querySelector('.combo-option.highlight');
+    if (el) el.scrollIntoView({block: 'nearest'});
+}
+
+function comboPick(e, value) {
+    e.preventDefault();  // prevent blur from closing before click registers
+    applyComboSelection(value);
+}
+
+function applyComboSelection(value) {
+    comboSelectedValue = value;
+    document.getElementById('override-search').value = value;
+    closeComboDropdown();
+}
+
+// Override apply button
+document.getElementById('btn-apply-override').onclick = function() {
+    const idx = state.selectedIndex;
+    if (idx < 0) return;
+    const chosen = comboSelectedValue || document.getElementById('override-search').value.trim();
+    if (!chosen) {
+        showToast('请搜索并选择一个目标文件夹', 'warn');
+        return;
+    }
+    // Verify chosen exists in A folders
+    if (!state.a_folders.includes(chosen)) {
+        showToast(`"${chosen}" 不在 A 文件夹中`, 'warn');
+        return;
+    }
+    state.confirmed[idx] = chosen;
+    delete state.skipped[idx];
+    selectFolder(idx);
+    updateBottomBar();
+    showToast(`已将 "${state.results[idx].b_folder}" 匹配到 "${chosen}"`, 'success');
+};
+
+// Confirm button
+document.getElementById('btn-confirm-match').onclick = function() {
+    const idx = state.selectedIndex;
+    if (idx < 0) return;
+    const r = state.results[idx];
+    const target = r.matched_a_folder;
+    if (target) {
+        state.confirmed[idx] = target;
+        delete state.skipped[idx];
+        selectFolder(idx);
+        updateBottomBar();
+        showToast(`已确认：${r.b_folder} → ${target}`, 'success');
+    }
+};
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║                   Process (Move)                          ║
+// ╚═══════════════════════════════════════════════════════════╝
+function getConfirmedPairs() {
+    const pairs = [];
+    state.results.forEach((r, i) => {
+        if (state.skipped[i]) return;
+        const target = state.confirmed[i] || r.matched_a_folder;
+        if (target) {
+            pairs.push({b_folder: r.b_folder, a_folder: target});
+        }
+    });
+    return pairs;
+}
+
+async function processAll() {
+    const pairs = getConfirmedPairs();
+    if (pairs.length === 0) {
+        showToast('没有已确认的匹配项', 'info');
+        return;
+    }
+    await executeProcess(pairs);
+}
+
+async function processSelected() {
+    const idx = state.selectedIndex;
+    if (idx < 0) return;
+    const r = state.results[idx];
+    const target = state.confirmed[idx] || r.matched_a_folder;
+    if (!target) {
+        showToast('请先为此文件夹确认目标', 'warn');
+        return;
+    }
+    await executeProcess([{b_folder: r.b_folder, a_folder: target}]);
+}
+
+async function executeProcess(pairs) {
+    if (state.processing) return;
+    state.processing = true;
+
+    const btnAll = document.getElementById('btn-process-all');
+    const btnSel = document.getElementById('btn-process-selected');
+    const progWrap = document.getElementById('progress-wrap');
+    const progBar = document.getElementById('progress-bar');
+    btnAll.disabled = true;
+    btnSel.disabled = true;
+    progWrap.classList.add('visible');
+    progBar.style.width = '0%';
+
+    try {
+        const data = await API.process(pairs);
+        const results = data.results || [];
+
+        const moved = results.filter(r => r.status === 'moved').length;
+        const skipped = results.filter(r => r.status === 'skipped').length;
+        const errors = results.filter(r => r.status === 'error').length;
+
+        progBar.style.width = '100%';
+
+        let msg = `处理完成：`;
+        if (moved > 0) msg += `移动 ${moved} 张 `;
+        if (skipped > 0) msg += `跳过 ${skipped} 张 `;
+        if (errors > 0) msg += `失败 ${errors} 张`;
+        showToast(msg, errors > 0 ? 'warn' : 'success');
+
+        setTimeout(() => {
+            progWrap.classList.remove('visible');
+            progBar.style.width = '0%';
+            doScan();
+            state.processing = false;
+        }, 500);
+    } catch (e) {
+        showToast('处理失败：' + (e.detail || e.message || e), 'error');
+        state.processing = false;
+        btnAll.disabled = false;
+        btnSel.disabled = false;
+        progWrap.classList.remove('visible');
+    }
+}
+
+function updateBottomBar() {
+    const pairs = getConfirmedPairs();
+    const btnAll = document.getElementById('btn-process-all');
+    const btnSel = document.getElementById('btn-process-selected');
+    const summary = document.getElementById('summary-text');
+
+    const confirmed = Object.keys(state.confirmed).length;
+    const total = state.results.length;
+    const skipped = Object.keys(state.skipped).length;
+    const autoMatched = state.results.filter(r => r.matched_a_folder && r.confidence >= 0.95).length;
+
+    btnAll.disabled = pairs.length === 0 || state.processing;
+    btnSel.disabled = state.selectedIndex < 0 || state.processing;
+
+    summary.textContent = `共 ${total} 个文件夹 | ${confirmed} 已确认 | ${skipped} 已跳过 | ${autoMatched} 自动匹配 | ${pairs.length} 待处理`;
+}
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║                   Keyboard Shortcuts                      ║
+// ╚═══════════════════════════════════════════════════════════╝
+document.addEventListener('keydown', function(e) {
+    // Don't intercept when typing in search/input fields
+    if (e.target.tagName === 'INPUT' && e.target.id !== 'override-search') return;
+    // For the combo search input, let its own keydown handler work
+    if (e.target.id === 'override-search') return;
+
+    const results = state.results;
+    if (results.length === 0) return;
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        let idx = state.selectedIndex;
+        if (idx < 0) idx = 0;
+        else idx += e.key === 'ArrowDown' ? 1 : -1;
+        idx = Math.max(0, Math.min(idx, results.length - 1));
+        selectFolder(idx);
+    }
+
+    if (e.key === 'Enter' && state.selectedIndex >= 0) {
+        e.preventDefault();
+        const idx = state.selectedIndex;
+        const r = state.results[idx];
+        const target = r.matched_a_folder;
+        if (target) {
+            state.confirmed[idx] = target;
+            delete state.skipped[idx];
+            selectFolder(idx);
+            updateBottomBar();
+        }
+    }
+
+    if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        const idx = state.selectedIndex;
+        if (idx >= 0) {
+            state.skipped[idx] = true;
+            delete state.confirmed[idx];
+            selectFolder(idx);
+            updateBottomBar();
+            showToast(`已跳过：${state.results[idx].b_folder}`, 'info');
+        }
+    }
+});
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║                   Helpers                                 ║
+// ╚═══════════════════════════════════════════════════════════╝
+function escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+function escAttr(s) {
+    return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║                   Init                                    ║
+// ╚═══════════════════════════════════════════════════════════╝
+(async function init() {
+    try {
+        const cfg = await API.getConfig();
+        state.baseB = cfg.folder_b_path || '';
+        if (cfg.folder_a_path && cfg.folder_b_path) {
+            await doScan();
+        } else {
+            showToast('请先配置文件夹路径（点击 ⚙️ 设置）', 'info');
+        }
+    } catch (e) {
+        console.error('Init error:', e);
+    }
+})();
+</script>
+
+</body>
+</html>

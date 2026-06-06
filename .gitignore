@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+thumb_cache/
+.pixiv_manager_state.json
+config.json
